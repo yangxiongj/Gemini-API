@@ -207,3 +207,4 @@ temp/
 # Cookies and credentials
 cookies.json
 *.cookies
+.idea
