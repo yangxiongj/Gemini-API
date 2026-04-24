@@ -26,12 +26,13 @@ def build_model_header(model_id: str, capacity_tail: str | int, version_flag: in
         The capacity value (1=free, 2=advanced, 4=plus).
     version_flag: int | None
         Optional version flag for newer models (1, 3, 5).
-        If provided, creates extended 17-element format with placeholder for UUID.
+        If provided, creates extended 17-element format with placeholder for UUID at position 16.
     """
 
     if version_flag is not None:
         # New 17-element format with version_flag
-        # Position 16 will be filled with UUID at runtime
+        # Position 16 (index 16, the 17th element) will be filled with UUID at runtime
+        # Format: [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
         header_value = f'[1,null,null,null,"{model_id}",null,null,0,[4],null,null,{capacity_tail},null,null,{version_flag},null,null]'
     else:
         # Legacy 12-element format

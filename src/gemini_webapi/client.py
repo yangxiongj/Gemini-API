@@ -501,20 +501,49 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
         or fall back to the :class:`Model` enum.
         """
 
+        if self.verbose:
+            logger.debug(f"🔍 Mapping model name: {name}")
+
+        # First, check if it's a model_id in the registry
         if name in self._model_registry:
+            if self.verbose:
+                logger.debug(f"✅ Found by model_id in registry: {name}")
             return self._model_registry[name]
 
+        # Second, check if it matches model_name or display_name in registry
         for m in self._model_registry.values():
             if m.model_name == name or m.display_name == name:
+                if self.verbose:
+                    logger.debug(f"✅ Found by model_name/display_name in registry: {name} -> {m.model_name}")
                 return m
 
-        return Model.from_name(name)
+        # Third, try to find in Model enum by exact model_name match
+        try:
+            enum_model = Model.from_name(name)
+            if self.verbose:
+                logger.debug(f"✅ Found in Model enum: {name}")
+            # Try to upgrade to AvailableModel if possible
+            return self._resolve_enum_model(enum_model)
+        except ValueError:
+            pass
+
+        # If still not found, raise error
+        if self.verbose:
+            logger.debug(f"❌ Model not found: {name}")
+        raise ValueError(
+            f"Unknown model name: {name}. Available models: "
+            f"{', '.join([m.model_name for m in self._model_registry.values()])}"
+        )
 
     def _resolve_enum_model(self, model: Model) -> Model | AvailableModel:
         """
         Try to upgrade a :class:`Model` enum to an :class:`AvailableModel`
         from the dynamic registry.  Falls back to the enum itself if no match
         is found.
+        
+        Note: For models with version_flag (17-element format), we should NOT
+        upgrade to AvailableModel from registry, as the registry models use
+        12-element format. We keep the enum model to preserve the version_flag.
         """
 
         if model is Model.UNSPECIFIED:
@@ -526,8 +555,19 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
 
         try:
             parsed = json.loads(header_value)
+            
+            # Check if this is a 17-element format (with version_flag)
+            if len(parsed) == 17:
+                # Don't upgrade to AvailableModel, keep the enum to preserve version_flag
+                if self.verbose:
+                    logger.debug(f"Keeping enum model (17-element format): {model.model_name}")
+                return model
+            
+            # For 12-element format, try to upgrade to AvailableModel
             model_id = get_nested_value(parsed, [4], "")
             if model_id and model_id in self._model_registry:
+                if self.verbose:
+                    logger.debug(f"Upgraded to AvailableModel: {model.model_name} -> {self._model_registry[model_id].model_name}")
                 return self._model_registry[model_id]
         except json.JSONDecodeError:
             pass

@@ -116,6 +116,9 @@ class AvailableModel(BaseModel):
 
         This uses the :class:`Model` enum to resolve hex identifiers to their
         canonical names (e.g., "gemini-3-pro").
+        
+        Note: Multiple models can share the same model_id but differ in version_flag.
+        This mapping returns the base model name for display purposes only.
         """
 
         result: dict[str, str] = {}
@@ -133,10 +136,12 @@ class AvailableModel(BaseModel):
             except json.JSONDecodeError:
                 continue
 
-            if model_id and model_id not in result:
-                # Use basic model name without tier suffix regardless of the actual tier
-                base_key = "BASIC_" + member.name.split("_", 1)[-1]
-                base_member = getattr(Model, base_key, member)
-                result[model_id] = base_member.model_name
+            # For models with the same ID, prefer the basic tier name
+            if model_id:
+                if model_id not in result:
+                    # Use basic model name without tier suffix regardless of the actual tier
+                    base_key = "BASIC_" + member.name.split("_", 1)[-1]
+                    base_member = getattr(Model, base_key, member)
+                    result[model_id] = base_member.model_name
 
         return result
