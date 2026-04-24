@@ -870,21 +870,37 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                 uuid_val_1 = str(uuid.uuid4()).upper()  # For x-goog-ext-525005358-jspb
                 uuid_val_2 = str(uuid.uuid4()).upper()  # For x-goog-ext-525001261-jspb[16]
 
+                if self.verbose:
+                    logger.debug(f"Generated UUIDs: uuid_1={uuid_val_1}, uuid_2={uuid_val_2}")
+
                 inner_req_list[59] = uuid_val_1
 
                 # Inject UUID into model header if it's the new 17-element format
                 model_header = dict(model.model_header)
                 header_value = model_header.get(MODEL_HEADER_KEY, "")
                 
+                if self.verbose:
+                    logger.debug(f"Original model header: {header_value[:100]}..." if len(header_value) > 100 else f"Original model header: {header_value}")
+                
                 if header_value:
                     try:
                         parsed = json.loads(header_value)
+                        header_length = len(parsed)
+                        
+                        if self.verbose:
+                            logger.debug(f"Model header format: {header_length} elements")
+                        
                         # If it's 17-element format with null at position 16, inject UUID
                         if len(parsed) == 17 and parsed[16] is None:
                             parsed[16] = uuid_val_2
                             model_header[MODEL_HEADER_KEY] = json.dumps(parsed).decode("utf-8")
-                    except (json.JSONDecodeError, IndexError):
-                        pass
+                            
+                            if self.verbose:
+                                logger.debug(f"Injected UUID into position 16: {uuid_val_2}")
+                                logger.debug(f"Updated model header: {model_header[MODEL_HEADER_KEY][:100]}..." if len(model_header[MODEL_HEADER_KEY]) > 100 else f"Updated model header: {model_header[MODEL_HEADER_KEY]}")
+                    except (json.JSONDecodeError, IndexError) as e:
+                        if self.verbose:
+                            logger.warning(f"Failed to parse/inject UUID into model header: {e}")
 
                 request_headers = {
                     **Headers.GEMINI.value,
@@ -903,6 +919,52 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                     ).decode("utf-8"),
                 }
 
+                if self.verbose:
+                    # Log request details
+                    logger.debug("=" * 80)
+                    logger.debug("REQUEST DETAILS")
+                    logger.debug("=" * 80)
+                    logger.debug(f"Model: {model.model_name if hasattr(model, 'model_name') else 'custom'}")
+                    
+                    # Full URL with query parameters
+                    query_string = "&".join([f"{k}={v}" for k, v in params.items()])
+                    full_url = f"{Endpoint.GENERATE}?{query_string}"
+                    logger.debug(f"Full URL: {full_url}")
+                    
+                    logger.debug(f"\nQuery Parameters:")
+                    for key, value in params.items():
+                        logger.debug(f"  {key} = {value}")
+                    
+                    logger.debug(f"\nRequest Headers:")
+                    for key, value in request_headers.items():
+                        if key == MODEL_HEADER_KEY:
+                            logger.debug(f"  {key}: {value[:150]}..." if len(value) > 150 else f"  {key}: {value}")
+                        elif key == "x-goog-ext-525005358-jspb":
+                            logger.debug(f"  {key}: {value}")
+                        else:
+                            logger.debug(f"  {key}: {value}")
+                    
+                    logger.debug(f"\nPOST Body:")
+                    logger.debug(f"  at (Access Token): {self.access_token[:30]}...{self.access_token[-10:]}")
+                    
+                    # Parse and display f.req structure
+                    try:
+                        f_req_parsed = json.loads(request_data["f.req"])
+                        if len(f_req_parsed) > 1:
+                            inner_list = json.loads(f_req_parsed[1])
+                            logger.debug(f"  f.req structure:")
+                            logger.debug(f"    Total elements: {len(inner_list)}")
+                            logger.debug(f"    [0] Message: {inner_list[0]}")
+                            logger.debug(f"    [1] Language: {inner_list[1]}")
+                            logger.debug(f"    [2] Metadata (first 3): {inner_list[2][:3] if isinstance(inner_list[2], list) else inner_list[2]}")
+                            logger.debug(f"    [7] Streaming flag: {inner_list[7]}")
+                            logger.debug(f"    [59] UUID: {inner_list[59]}")
+                            logger.debug(f"    [68] Value: {inner_list[68]}")
+                    except Exception as e:
+                        logger.debug(f"  f.req: [Unable to parse: {e}]")
+                    
+                    logger.debug("=" * 80)
+
                 async with self.client.stream(
                     "POST",
                     Endpoint.GENERATE,
@@ -913,7 +975,7 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                 ) as response:
                     if self.verbose:
                         logger.debug(
-                            f"HTTP Request: POST {Endpoint.GENERATE} [{response.status_code}]"
+                            f"HTTP Response: Status={response.status_code}, Headers={dict(response.headers)}"
                         )
                     if response.status_code != 200:
                         await self.close()
