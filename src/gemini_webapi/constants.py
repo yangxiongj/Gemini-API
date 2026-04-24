@@ -14,7 +14,7 @@ DEFAULT_METADATA = ["", "", "", None, None, None, None, None, None, ""]
 MODEL_HEADER_KEY = "x-goog-ext-525001261-jspb"
 
 
-def build_model_header(model_id: str, capacity_tail: str | int) -> dict[str, str]:
+def build_model_header(model_id: str, capacity_tail: str | int, version_flag: int | None = None) -> dict[str, str]:
     """
     Builds the complete HTTP header dictionary required for model selection.
     
@@ -24,10 +24,21 @@ def build_model_header(model_id: str, capacity_tail: str | int) -> dict[str, str
         The model identifier (hex string).
     capacity_tail: str | int
         The capacity value (1=free, 2=advanced, 4=plus).
+    version_flag: int | None
+        Optional version flag for newer models (1, 3, 5).
+        If provided, creates extended 17-element format with placeholder for UUID.
     """
 
+    if version_flag is not None:
+        # New 17-element format with version_flag
+        # Position 16 will be filled with UUID at runtime
+        header_value = f'[1,null,null,null,"{model_id}",null,null,0,[4],null,null,{capacity_tail},null,null,{version_flag},null,null]'
+    else:
+        # Legacy 12-element format
+        header_value = f'[1,null,null,null,"{model_id}",null,null,0,[4],null,null,{capacity_tail}]'
+    
     return {
-        MODEL_HEADER_KEY: f'[1,null,null,null,"{model_id}",null,null,0,[4],null,null,{capacity_tail}]',
+        MODEL_HEADER_KEY: header_value,
         "x-goog-ext-73010989-jspb": "[0]",
         "x-goog-ext-73010990-jspb": "[0]",
     }
@@ -138,22 +149,22 @@ class Model(Enum):
     )
     ADVANCED_FLASH = (
         "gemini-3-flash-advanced",
-        build_model_header("56fdd199312815e2", 2),
+        build_model_header("56fdd199312815e2", 2, version_flag=1),
         True,
     )
     ADVANCED_THINKING = (
         "gemini-3-flash-thinking-advanced",
-        build_model_header("e051ce1aa80aa576", 2),
+        build_model_header("e051ce1aa80aa576", 2, version_flag=5),
         True,
     )
     PRO_3_1 = (
         "gemini-3.1-pro",
-        build_model_header("e6fa609c3fa255c0", 2),
+        build_model_header("e6fa609c3fa255c0", 2, version_flag=3),
         True,
     )
     PREVIEW_PRO_3_1 = (
         "gemini-3.1-pro-preview",
-        build_model_header("e6fa609c3fa255c0", 2),
+        build_model_header("e6fa609c3fa255c0", 2, version_flag=3),
         True,
     )
 

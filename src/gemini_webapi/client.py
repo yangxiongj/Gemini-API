@@ -866,14 +866,30 @@ class GeminiClient(ChatMixin, GemMixin, ResearchMixin):
                 inner_req_list[61] = []
                 inner_req_list[68] = 2
 
-                uuid_val = str(uuid.uuid4()).upper()
+                # Generate two independent UUIDs
+                uuid_val_1 = str(uuid.uuid4()).upper()  # For x-goog-ext-525005358-jspb
+                uuid_val_2 = str(uuid.uuid4()).upper()  # For x-goog-ext-525001261-jspb[16]
 
-                inner_req_list[59] = uuid_val
+                inner_req_list[59] = uuid_val_1
+
+                # Inject UUID into model header if it's the new 17-element format
+                model_header = dict(model.model_header)
+                header_value = model_header.get(MODEL_HEADER_KEY, "")
+                
+                if header_value:
+                    try:
+                        parsed = json.loads(header_value)
+                        # If it's 17-element format with null at position 16, inject UUID
+                        if len(parsed) == 17 and parsed[16] is None:
+                            parsed[16] = uuid_val_2
+                            model_header[MODEL_HEADER_KEY] = json.dumps(parsed).decode("utf-8")
+                    except (json.JSONDecodeError, IndexError):
+                        pass
 
                 request_headers = {
                     **Headers.GEMINI.value,
-                    **model.model_header,
-                    "x-goog-ext-525005358-jspb": f'["{uuid_val}",1]',
+                    **model_header,
+                    "x-goog-ext-525005358-jspb": f'["{uuid_val_1}",1]',
                     **Headers.SAME_DOMAIN.value,
                 }
 
